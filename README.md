@@ -1,10 +1,8 @@
 # epub_library
 
-A new Flutter project.
+A parsing Epub library for cross use. It is meant to act as a bridge between mobile and desktop/laptop pc adding synchronization through local network.
 
 ## Getting Started
-
-A parsing Epub library for cross use. It is meant to act as a bridge between mobile and desktop/laptop pc adding synchronization through local network.
 
 A few resources to get you started if this is your first Flutter project:
 
