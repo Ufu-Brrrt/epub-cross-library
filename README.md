@@ -4,7 +4,7 @@ A new Flutter project.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+A parsing Epub library for cross use. It is meant to act as a bridge between mobile and desktop/laptop pc adding synchronization through local network.
 
 A few resources to get you started if this is your first Flutter project:
 
