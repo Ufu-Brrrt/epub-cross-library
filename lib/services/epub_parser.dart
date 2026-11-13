@@ -5,6 +5,7 @@ import 'package:xml/xml.dart';
 import 'dart:convert';
 import '../models/books.dart';
 import 'dart:typed_data';
+import '../models/chapter_block.dart';
 
 Book? readEpub(String path) {
   
@@ -79,3 +80,95 @@ Uint8List? findCover(Archive archive, XmlDocument opfDoc, String opfPath) {
   return Uint8List.fromList(entry.content as List<int>);
 }
 
+List<List<ChapterBlock>> readChapters(String path) {
+  final archive = ZipDecoder().decodeBytes(File(path).readAsBytesSync());
+
+  final container = archive.findFile('META-INF/container.xml');
+  if (container == null) return [];
+  final containerDoc =
+      XmlDocument.parse(utf8.decode(container.content as List<int>));
+  final opfPath = containerDoc
+      .findAllElements('rootfile')
+      .firstOrNull
+      ?.getAttribute('full-path');
+  if (opfPath == null) return [];
+
+  final opfEntry = archive.findFile(opfPath);
+  if (opfEntry == null) return [];
+  final opfDoc =
+      XmlDocument.parse(utf8.decode(opfEntry.content as List<int>));
+
+  final hrefById = <String, String>{};
+  for (final item in opfDoc.findAllElements('item')) {
+    final id = item.getAttribute('id');
+    final href = item.getAttribute('href');
+    if (id != null && href != null) hrefById[id] = href;
+  }
+
+  final slash = opfPath.lastIndexOf('/');
+  final baseDir = slash == -1 ? '' : opfPath.substring(0, slash + 1);
+
+  const textTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+  final chapters = <List<ChapterBlock>>[];
+
+  for (final ref in opfDoc.findAllElements('itemref')) {
+    final href = hrefById[ref.getAttribute('idref')];
+    if (href == null) continue;
+
+    final chapterPath = baseDir + Uri.decodeFull(href);
+    final entry = archive.findFile(chapterPath);
+    if (entry == null) continue;
+
+    try {
+      final doc = XmlDocument.parse(utf8.decode(entry.content as List<int>));
+      final body = doc.findAllElements('body').firstOrNull;
+      if (body == null) continue;
+
+      final blocks = <ChapterBlock>[];
+      for (final e in body.descendants.whereType<XmlElement>()) {
+        final tag = e.name.local;
+
+        if (textTags.contains(tag)) {
+          final t = e.innerText.trim();
+          if (t.isNotEmpty) blocks.add(ChapterBlock.text(t));
+        } else if (tag == 'img' || tag == 'image') {
+          final src = e.getAttribute('src') ??
+              e.getAttribute('xlink:href') ??
+              e.getAttribute('href');
+          if (src == null || src.startsWith('data:')) continue;
+
+          final imgEntry = archive.findFile(resolvePath(chapterPath, src));
+          if (imgEntry != null) {
+            blocks.add(ChapterBlock.image(
+                Uint8List.fromList(imgEntry.content as List<int>)));
+          }
+        }
+      }
+
+      if (blocks.isEmpty) {
+        final t = body.innerText.trim();
+        if (t.isNotEmpty) blocks.add(ChapterBlock.text(t));
+      }
+      if (blocks.isNotEmpty) chapters.add(blocks);
+    } catch (_) {
+      // skip a chapter that fails to parse
+    }
+  }
+  return chapters;
+}
+
+String resolvePath(String chapterPath, String src) {
+  final slash = chapterPath.lastIndexOf('/');
+  final baseDir = slash == -1 ? '' : chapterPath.substring(0, slash + 1);
+  final cleaned = Uri.decodeFull(src.split('#').first);
+
+  final parts = <String>[];
+  for (final p in (baseDir + cleaned).split('/')) {
+    if (p == '..') {
+      if (parts.isNotEmpty) parts.removeLast();
+    } else if (p != '.' && p.isNotEmpty) {
+      parts.add(p);
+    }
+  }
+  return parts.join('/');
+}

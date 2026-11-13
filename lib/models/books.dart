@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 
 
-bool finished;
+
 class Book {
+    bool finished;
+    
   final String title;
   final String author; 
   final String path;
@@ -14,7 +16,7 @@ class Book {
     required this.author, 
     required this.path,
     this.cover,
-    this.finished = false;
+    this.finished = false,
     }
   );
 

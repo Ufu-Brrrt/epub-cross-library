@@ -3,8 +3,8 @@ import 'models/books.dart';
 import 'services/epub_parser.dart';
 import 'dart:async';
 import 'dart:io';
-
-
+import 'services/library_store.dart';
+import 'screens/reader_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -30,6 +30,7 @@ class LibraryPage extends StatefulWidget {
 }
 
 class _LibraryPageState extends State<LibraryPage> {
+  final store = LibraryStore('C:/Users/LUDWIG/epub');
   final List<Book> books = [];
   final Set<String> knownPaths = {};
   Timer? timer;
@@ -37,6 +38,7 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   void initState() {
     super.initState();
+    store.load();
     scanFolder();
     timer = Timer.periodic(const Duration(seconds: 10), (_) => scanFolder());
   }
@@ -63,6 +65,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
       final book = readEpub(file.path);
       if (book != null) {
+        book.finished = store.isFinished(book.path);
         newBooks.add(book);
         knownPaths.add(file.path);
       }
@@ -78,34 +81,80 @@ class _LibraryPageState extends State<LibraryPage> {
       });
     }
   }
- @override
+    void toggleFinished(Book b) {
+    setState(() {
+      b.finished = !b.finished;
+    });
+    store.setFinished(b.path, b.finished);
+    }
+  
+
+
+   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('My Library')),
-      body: GridView.builder(
-  padding: const EdgeInsets.all(16),
-  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-    maxCrossAxisExtent: 180,
-    childAspectRatio: 0.65,
-    crossAxisSpacing: 16,
-    mainAxisSpacing: 16,
-  ),
-  itemCount: books.length,
-  itemBuilder: (context, index) {
-    final b = books[index];
-    return Card(
-      child: Column(
-        children: [
-         Expanded(child: b.cover != null ? Image.memory(b.cover!, fit: BoxFit.cover, width: double.infinity) : const Icon(Icons.book, size: 64),),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+    final reading = books.where((b) => !b.finished).toList();
+    final finished = books.where((b) => b.finished).toList();
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('My Library'),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: 'Library (${reading.length})'),
+              Tab(text: 'Finished (${finished.length})'),
+            ],
           ),
-        ],
+        ),
+        body: TabBarView(
+          children: [
+            buildGrid(reading),
+            buildGrid(finished),
+          ],
+        ),
       ),
     );
-  },
-),
+  }
+
+  Widget buildGrid(List<Book> list) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 180,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: list.length,
+      itemBuilder: (context, index) {
+        final b = list[index];
+        
+        return InkWell(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => ReaderPage(book: b)),
+          ),
+          onLongPress: () => toggleFinished(b),
+          child: Card(
+            child: Column(
+              children: [
+                Expanded(
+                  child: b.cover != null
+                      ? Image.memory(b.cover!,
+                          fit: BoxFit.cover, width: double.infinity)
+                      : const Icon(Icons.book, size: 64),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(b.title,
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
